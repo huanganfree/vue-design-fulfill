@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设计完善的响应式系统</title>
+</head>
+
+<body>
+
+    <script>
+        // 1.初版
+        function originalVersion() {
+            const bucket = new Set()
+
+            const data = {text: 'hello world'}
+
+            let activeEffect = null
+
+            const obj = new Proxy(data, {
+                get(target, key) {
+                    if (activeEffect) {
+                        bucket.add(activeEffect)
+                    }
+                    return target[key]
+                },
+                set(target, key, newVal) {
+                    target[key] = newVal
+                    bucket.forEach(fn => fn())
+                    return true
+                }
+            })
+
+            function effect(fn) {
+                activeEffect = fn
+                fn()
+            }
+            effect(
+                () => document.body.innerText = obj.text + '--'
+            )
+
+            setTimeout(() => {
+                console.log(111);
+                obj.text11 = '22'
+            }, 1000);
+        }
+
+        // 初版的问题在于：对象的任何属性操作，都会触发副作用函数执行
+
+        // 2.不同对象的不同属性和副作用函数之间建立对应关系
+        secondVersion()
+        function secondVersion() {
+
+            const objMap = new Map() // 存储对象和key的映射关系
+
+            const data = {text: 'hello world'}
+
+            let activeEffect = null
+
+            const obj = new Proxy(data, {
+                get(target, key) {
+                    let keyMap = objMap.get(target)
+                    if (!keyMap) {
+                        keyMap = new Map()
+                        objMap.set(target, keyMap) // 建立映射关系
+                    }
+
+                    let effectFnSet = keyMap.get(key)
+
+                    if (!effectFnSet) {
+                        effectFnSet = new Set()
+                        keyMap.set(key, effectFnSet) // key的值是set集合，因为副作用函数不止一个
+                    }
+                    const aimFn = [...effectFnSet].find(fn => fn == activeEffect)
+                    if (!aimFn) { // 在set的桶中，没找到函数
+                        effectFnSet.add(activeEffect)
+                    }
+                    console.log(objMap, keyMap);
+                    return target[key]
+                },
+                set(target, key, newVal) {
+                    target[key] = newVal
+                    const keyMap = objMap.get(target)
+                    if(!keyMap) {
+                        return
+                    }
+                    const effectFnSet = keyMap.get(key)
+                    if (effectFnSet) {
+                        effectFnSet.forEach(fn => fn())
+                    }
+                    return true
+                }
+            })
+
+            function effect(fn) {
+                activeEffect = fn
+                fn()
+            }
+
+            const fnl = function () {
+                console.log(111);
+                document.body.innerText = obj.text + '111'
+            }
+
+            const fn2 = function () {
+                console.log(222);
+                document.body.innerText = obj.text + '222'
+            }
+
+            effect(fnl)
+            effect(fn2)
+
+            setTimeout(() => {
+                obj.text = '22'
+            }, 1000);
+
+        }
+
+    </script>
+
+</body>
+
+</html>
