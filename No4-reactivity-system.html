@@ -62,12 +62,15 @@
                 effectFnSet = new Set()
                 keyMap.set(key, effectFnSet) // key的值是set集合，因为副作用函数不止一个
             }
-            const aimFn = [...effectFnSet].find(fn => fn == activeEffect)
-            if (!aimFn) { // 在set的桶中，没找到函数
-                effectFnSet.add(activeEffect)
-            }
+            effectFnSet.add(activeEffect)
+            activeEffect.deps.push(effectFnSet)
+            // 以下方法多余，因为set不会重复添加的。
+            // const aimFn = [...effectFnSet].find(fn => fn == activeEffect)
+            // if (!aimFn) { // 在set的桶中，没找到函数
+            //     effectFnSet.add(activeEffect)
+            // }
         }
-        // 封装执行副作用函数的逻辑
+        // 封装执行依赖集合中副作用函数的逻辑
         function trigger(objMap, target, key) {
             const keyMap = objMap.get(target)
             if (!keyMap) {
@@ -78,7 +81,6 @@
                 effectFnSet.forEach(fn => fn())
             }
         }
-        secondVersion()
         function secondVersion() {
 
             const objMap = new Map() // 存储对象和key的映射关系
@@ -122,9 +124,61 @@
         }
 
         /**
-         * 3. 第二点中也有不太严谨的逻辑，就是ok属性如果变为false，然后，text变化时，副作用函数仍执行。我们希望不读取
-         *  text值是，不执行
+         * 3. 第二点中也有不太严谨的逻辑，就是ok属性如果变为false。然后，text变化时，副作用函数仍执行。我们希望不读取
+         *  text值时，是不存储副作用函数的。
         */
+        thirdVersion()
+        function thirdVersion() {
+            let activeEffect = null
+            const objMap = new Map() // 存储对象和key的映射关系
+
+            const data = { text: 'hello world', ok: true }
+
+            const obj = new Proxy(data, {
+                get(target, key) {
+                    track(objMap, target, key, activeEffect)
+                    return target[key]
+                },
+                set(target, key, newVal) {
+                    target[key] = newVal
+                    trigger(objMap, target, key)
+                    return true
+                }
+            })
+
+            function effect(fn) {
+                const effectTruth = () => {
+                    cleanup(activeEffect)
+                    fn()
+                }
+                activeEffect = effectTruth
+                activeEffect.deps = []
+                effectTruth(activeEffect)
+            }
+
+            function cleanup(activeEffect) {
+                activeEffect.deps.forEach(depSet => {
+                    depSet.delete(activeEffect)
+                })
+                activeEffect.deps = []
+            }
+
+            const fnl = function (selfFn)  {
+                console.log('fnl---');
+                document.body.innerText = obj.ok ? obj.text : 'not'
+            }
+
+            effect(fnl)
+
+            setTimeout(() => {
+                obj.ok = false
+                setTimeout(() => {
+                    obj.text = 1122
+                }, 1000);
+            }, 1000);
+
+        }
+
     </script>
 
 </body>
