@@ -8,7 +8,6 @@
 </head>
 
 <body>
-
     <script>
         // 1.初版
         // 初版的问题在于：对象的任何属性操作，都会触发副作用函数执行
@@ -64,11 +63,6 @@
             }
             effectFnSet.add(activeEffect)
             activeEffect.deps.push(effectFnSet)
-            // 以下方法多余，因为set不会重复添加的。
-            // const aimFn = [...effectFnSet].find(fn => fn == activeEffect)
-            // if (!aimFn) { // 在set的桶中，没找到函数
-            //     effectFnSet.add(activeEffect)
-            // }
         }
         // 封装执行依赖集合中副作用函数的逻辑
         function trigger(objMap, target, key) {
@@ -76,51 +70,12 @@
             if (!keyMap) {
                 return
             }
+            // 这里的set集合断开引用，可以避免循环
             const effectFnSet = keyMap.get(key)
-            if (effectFnSet) {
-                effectFnSet.forEach(fn => fn())
+            const newSetEffectFnSet = new Set(effectFnSet)
+            if (newSetEffectFnSet) {
+                newSetEffectFnSet.forEach(fn => fn())
             }
-        }
-        function secondVersion() {
-
-            const objMap = new Map() // 存储对象和key的映射关系
-
-            const data = {text: 'hello world', ok: true}
-
-            let activeEffect = null
-            const obj = new Proxy(data, {
-                get(target, key) {
-                    track(objMap, target, key, activeEffect)
-                    return target[key]
-                },
-                set(target, key, newVal) {
-                    target[key] = newVal
-                    trigger(objMap, target, key)
-                    return true
-                }
-            })
-
-            function effect(fn) {
-                activeEffect = fn
-                fn()
-            }
-
-            const fnl = function () {
-                console.log(111);
-                document.body.innerText = obj.ok ? obj.text : 'not'
-            }
-
-
-            effect(fnl)
-
-            console.log(objMap);
-            setTimeout(() => {
-                obj.ok = false
-                setTimeout(() => {
-                    obj.text = 1122
-                }, 1000);
-            }, 1000);
-
         }
 
         /**
@@ -132,10 +87,14 @@
             let activeEffect = null
             const objMap = new Map() // 存储对象和key的映射关系
 
-            const data = { text: 'hello world', ok: true }
+            const data = {text: 'hello world', ok: true}
+
+            let temp1 = null
+            let temp2 = null
 
             const obj = new Proxy(data, {
                 get(target, key) {
+                    debugger
                     track(objMap, target, key, activeEffect)
                     return target[key]
                 },
@@ -146,41 +105,69 @@
                 }
             })
 
+            // 改写副作用函数
             function effect(fn) {
                 const effectTruth = () => {
-                    cleanup(activeEffect)
+                    cleanup(effectTruth)
+                    activeEffect = effectTruth
                     fn()
                 }
-                activeEffect = effectTruth
-                activeEffect.deps = []
-                effectTruth(activeEffect)
+
+                effectTruth.deps = []
+                effectTruth()
             }
 
             function cleanup(activeEffect) {
+
                 activeEffect.deps.forEach(depSet => {
+
                     depSet.delete(activeEffect)
+
                 })
+
                 activeEffect.deps = []
             }
 
-            const fnl = function (selfFn)  {
-                console.log('fnl---');
-                document.body.innerText = obj.ok ? obj.text : 'not'
-            }
+            // 书上源代码=========
+            // 因为obj.ok在fn2后读取，而这个时候，fn2已经是全局变量副作用函数了。因此，读取ok属性fn2会存储起来。然后，fn2也还会随着text属性存储起来。
+            // 所以会存储两次。
+            // effect(function fn1() {
+                
+            //     console.log('fn1---');
 
-            effect(fnl)
+            //     effect(function fn2() {
+            //         console.log('fn2---');
+            //         temp2 = obj.text
+            //     })
 
+            //     temp1 = obj.ok
+            // })
+            // 书上源代码=========
+
+            // 我的代码=========
+            // 因为obj.ok在fn2前读取，一读取就会存储副作用函数。所以fn2会一起存储起来。然后，fn2还会随着text属性存储起来。
+            effect(function fn1() {
+
+                console.log('fn1---', obj.ok);
+
+                effect(function fn2() {
+                    console.log('fn2---', obj.text);
+                })
+
+            })
+            // 我的代码=========
+
+
+            // 测试
             setTimeout(() => {
                 obj.ok = false
-                setTimeout(() => {
-                    obj.text = 1122
-                }, 1000);
+                // setTimeout(() => {
+                //     obj.ok = 1122
+                // }, 1000);
             }, 1000);
 
         }
-
     </script>
-
 </body>
 
 </html>
