@@ -36,6 +36,7 @@
                 activeEffect = fn
                 fn()
             }
+
             effect(
                 () => document.body.innerText = obj.text + '--'
             )
@@ -132,28 +133,27 @@
             // 书上源代码=========
             // 因为obj.ok在fn2后读取，而这个时候，fn2已经是全局变量副作用函数了。因此，读取ok属性fn2会存储起来。然后，fn2也还会随着text属性存储起来。
             // 所以会存储两次。
-            // effect(function fn1() {
-            //     console.log('fn1---');
-            //     effect(function fn2() {
-            //         console.log('fn2---');
-            //         temp2 = obj.text
-            //     })
-            //     temp1 = obj.ok
-            // })
+            effect(function fn1() {
+                console.log('fn1---');
+                effect(function fn2() {
+                    console.log('fn2---');
+                    temp2 = obj.text
+                })
+                temp1 = obj.ok
+            })
             // 书上源代码=========
 
 
             // 我的代码=========
             // 因为obj.ok在fn2前读取，一读取就会存储副作用函数。所以fn1带着内部的fn2一起存储起来。然后，fn2还会随着text属性存储起来。
-            effect(function fn1() {
+            // effect(function fn1() {
 
-                console.log('fn1---', obj.ok);
+            //     console.log('fn1---', obj.ok);
+            //     effect(function fn2() {
+            //         console.log('fn2---', obj.text);
+            //     })
 
-                effect(function fn2() {
-                    console.log('fn2---', obj.text);
-                })
-
-            })
+            // })
             // 我的代码=========
 
             // 测试
